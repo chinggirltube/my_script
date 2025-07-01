@@ -15,7 +15,7 @@ clear
 echo -e "${GREEN}#######################################################
 #      ${RED}Debian DDNS 一键脚本 ${GREEN}       #
 #               作者: ${YELLOW}LaoWangI           ${GREEN}#
-#             https://blog.wlens.top                  ${GREEN}#
+#             https://github.com/chinggirltube/                  ${GREEN}#
 #  ${YELLOW}优化: 缓存ZoneID, 重构更新逻辑, 加固文件权限${GREEN} #
 #######################################################${NC}"
 echo -e "${Info}"
