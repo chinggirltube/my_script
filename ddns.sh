@@ -1,32 +1,38 @@
 #!/bin/bash
 
+# --- 脚本元信息与颜色定义 ---
 GREEN="\033[32m"
 RED="\033[31m"
 YELLOW="\033[0;33m"
 NC="\033[0m"
-GREEN_ground="\033[42;37m" 
-RED_ground="\033[41;37m"   
+GREEN_ground="\033[42;37m" # 全局绿色
+RED_ground="\033[41;37m"   # 全局红色
 Info="${GREEN}[信息]${NC}"
 Error="${RED}[错误]${NC}"
 Tip="${YELLOW}[提示]${NC}"
 
+# --- 脚本欢迎界面 ---
 cop_info(){
 clear
 echo -e "${GREEN}#######################################################
 #      ${RED}Debian DDNS 一键脚本 ${GREEN}       #
-#               作者: ${YELLOW}LaoWangI           ${GREEN}#
-#             https://github.com/chinggirltube/                  ${GREEN}#
+#               作者: ${YELLOW}LAOWANG & AI           ${GREEN}#
+#             https://github.com/chinggirltube                  ${GREEN}#
 #  ${YELLOW}优化: 缓存ZoneID, 重构更新逻辑, 加固文件权限${GREEN} #
 #######################################################${NC}"
-echo -e "${Info}"
+echo -e "${Info}此版本已修复所有已知BUG，感谢您的耐心。 "
 echo
 }
 
+# --- 环境检查 ---
+
+# 检查系统
 if ! grep -qiE "debian|ubuntu" /etc/os-release; then
     echo -e "${Error}本脚本仅支持 Debian 或 Ubuntu 系统。"
     exit 1
 fi
 
+# 检查root权限
 check_root(){
     if [[ $(whoami) != "root" ]]; then
         echo -e "${Error}请以root身份执行该脚本！"
@@ -34,6 +40,7 @@ check_root(){
     fi
 }
 
+# 检查并安装curl和jq
 check_curl() {
     if ! command -v curl &>/dev/null || ! command -v jq &>/dev/null; then
         echo -e "${YELLOW}未检测到 curl 或 jq，正在安装...${NC}"
@@ -45,16 +52,23 @@ check_curl() {
     fi
 }
 
+# --- 核心安装与文件生成 ---
+
+# 安装DDNS相关文件
 install_ddns(){
+    # 备份旧版本，避免覆盖
     if [ -d "/etc/DDNS" ]; then
         echo -e "${Tip}检测到已存在的DDNS目录，将备份为 /etc/DDNS.bak_$(date +%s)"
         mv /etc/DDNS "/etc/DDNS.bak_$(date +%s)" 2>/dev/null
     fi
 
+    # 创建工作目录
     mkdir -p /etc/DDNS
     
+    # 将此脚本自身复制为系统命令
     cp "$0" /usr/bin/ddns && chmod +x /usr/bin/ddns
 
+    # 创建纯净的配置文件 (仅包含用户可配置项)
     cat <<'EOF' > /etc/DDNS/.config
 Domain="your_domain.com"
 Domainv6="your_domainv6.com" 
@@ -64,19 +78,27 @@ Api_key="your_api_key"
 Telegram_Bot_Token=""
 Telegram_Chat_ID=""
 EOF
-    chmod 600 /etc/DDNS/.config 
+    chmod 600 /etc/DDNS/.config # 安全加固：设置配置文件权限
 
+    # 创建独立的IP状态文件
     touch /etc/DDNS/.old_ipv4 && chmod 600 /etc/DDNS/.old_ipv4
     touch /etc/DDNS/.old_ipv6 && chmod 600 /etc/DDNS/.old_ipv6
 
+    # ================================================================= #
+    # 创建全新的、语法完全正确的DDNS执行脚本
+    # ================================================================= #
     cat <<'EOF' > /etc/DDNS/DDNS
 #!/bin/bash
 
+# DDNS工作目录
 WORK_DIR="/etc/DDNS"
-
+# 日志文件
 LOG_FILE="/var/log/ddns.log"
 
+# --- 全局变量 ---
 declare -A ZONE_ID_CACHE
+
+# --- 基础函数 ---
 
 log() {
     echo "$(date '+%Y-%m-%d %H:%M:%S') - $1" >> "$LOG_FILE"
@@ -92,6 +114,8 @@ send_telegram_notification(){
         log "Telegram通知未配置或配置不完整，跳过发送。"
     fi
 }
+
+# --- Cloudflare API 函数 ---
 
 get_root_domain() {
     echo "$1" | awk -F. '{print $(NF-1)"."$NF}'
@@ -200,11 +224,13 @@ update_dns_record() {
     fi
 }
 
+# ==================== 主逻辑开始 ====================
 log "====== DDNS 任务开始 ======"
 cd "$WORK_DIR" || { log "错误: 无法进入DDNS工作目录 $WORK_DIR"; exit 1; }
 
 source .config
 
+# --- 获取并验证公网IP地址 (已整合老版本验证逻辑) ---
 ipv4Regex="^([0-9]{1,3}\.){3}[0-9]{1,3}$"
 ipv6Regex="^([0-9a-fA-F]{1,4}:){7,7}[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,7}:|([0-9a-fA-F]{1,4}:){1,6}:[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,5}(:[0-9a-fA-F]{1,4}){1,2}|([0-9a-fA-F]{1,4}:){1,4}(:[0-9a-fA-F]{1,4}){1,3}|([0-9a-fA-F]{1,4}:){1,3}(:[0-9a-fA-F]{1,4}){1,4}|([0-9a-fA-F]{1,4}:){1,2}(:[0-9a-fA-F]{1,4}){1,5}|[0-9a-fA-F]{1,4}:((:[0-9a-fA-F]{1,4}){1,6})|:((:[0-9a-fA-F]{1,4}){1,7}|:)|fe80:(:[0-9a-fA-F]{0,4}){0,4}%[0-9a-zA-Z]{1,}|::(ffff(:0{1,4}){0,1}:){0,1}((25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])\.){3,3}(25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])|([0-9a-fA-F]{1,4}:){1,4}:((25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])\.){3,3}(25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])$"
 
@@ -228,10 +254,12 @@ else
     log "警告: 获取到的IPv6内容不是有效地址: '$raw_ipv6'。将忽略IPv6更新。"
 fi
 
+# --- 读取旧的 IP 地址 ---
 Old_Public_IPv4=$(cat "$WORK_DIR/.old_ipv4" 2>/dev/null)
 Old_Public_IPv6=$(cat "$WORK_DIR/.old_ipv6" 2>/dev/null)
 log "旧IPv4: [$Old_Public_IPv4], 旧IPv6: [$Old_Public_IPv6]"
 
+# --- 依次处理IPv4和IPv6的更新 ---
 notification_message=""
 update_result=""
 
@@ -253,6 +281,7 @@ else
     log "跳过 IPv6 更新：未配置域名或未获取到有效的公网IP。"
 fi
 
+# --- 任务结束，发送汇总通知 ---
 if [ -n "$notification_message" ]; then
     log "IP发生变化，准备发送最终通知。"
     send_telegram_notification "$notification_message"
@@ -275,6 +304,7 @@ EOF
     echo
 }
 
+# --- 管理菜单与功能 ---
 
 check_ddns_status(){
     if systemctl is-active --quiet ddns.timer; then
@@ -478,6 +508,7 @@ main(){
     go_ahead
 }
 
+# --- 脚本执行起点 ---
 check_root
 check_curl
 main
